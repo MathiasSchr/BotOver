@@ -59,7 +59,6 @@ Pour faciliter la gestion de MongoDB, téléchargez [MongoDB Compass](https://ww
 
 ## Fonctionnalités prévues / Idées
 
-- **Modération avancée** : Automatisation des bannissements, avertissements, etc.
 - **Statistiques serveur** : Suivi de l’activité et des interactions sur le serveur.
 - **Systèmes de jeu** : Mini-jeux intégrés au bot.
 - **Personnalisation** : Commandes spécifiques au thème du serveur OVER.
