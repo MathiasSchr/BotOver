@@ -13,7 +13,7 @@ BotOver est un bot Discord collaboratif développé par les membres du serveur *
 ## Architecture du Bot
 
 ### Code
-Le code de l'application est développé en **Python** et utilise la bibliothèque [discord.py](https://discordpy.readthedocs.io/en/stable/). Tous les fichiers sources se trouvent dans le dossier **/environnement applicatif**.
+Le code de l'application est développé en **Python** et utilise la bibliothèque [discord.py](https://discordpy.readthedocs.io/en/stable/). Tous les fichiers sources se trouvent dans le dossier **/application**.
 
 #### Principales dépendances :
 - **discord.py**
