@@ -24,6 +24,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)  # Initialise le bot ave
 class Birthday(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.last_checked_date = None
         self.loadDB()  # Initialise la connexion à la base de données
         self.findChannel()  # Localise le canal Discord pour les messages
         self.check_birthday.start()  # Démarre la tâche planifiée pour vérifier les anniversaires
@@ -49,10 +50,14 @@ class Birthday(commands.Cog):
         # Annule la tâche planifiée lorsque le cog est déchargé
         self.check_birthday.cancel()
 
-    @tasks.loop(time=datetime.time(hour=8, minute=0))  # Exécute tous les jours à 08:00
+    @tasks.loop(hours=24.0)
     async def check_birthday(self):
         # Vérifie les anniversaires tous les jours
         today = datetime.now().strftime("%d/%m")  # Format de la date du jour
+        if self.last_checked_date == today:  # Vérifie si l'anniversaire a déjà été souhaité aujourd'hui
+            print("Les anniversaires ont déjà été vérifiés aujourd'hui.")
+            return
+        self.last_checked_date = today  # Met à jour la dernière date vérifiée
         print(today)
         if self.collection.count_documents({"birthday": today}) > 0:  # Recherche des documents correspondant à la date
             birthdays = self.collection.find({"birthday": today})
