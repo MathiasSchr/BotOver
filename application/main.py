@@ -49,7 +49,7 @@ class Birthday(commands.Cog):
         # Annule la tâche planifiée lorsque le cog est déchargé
         self.check_birthday.cancel()
 
-    @tasks.loop(hours=24.0)
+    @tasks.loop(time=datetime.time(hour=8, minute=0))  # Exécute tous les jours à 08:00
     async def check_birthday(self):
         # Vérifie les anniversaires tous les jours
         today = datetime.now().strftime("%d/%m")  # Format de la date du jour
