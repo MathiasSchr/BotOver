@@ -8,97 +8,140 @@ from dotenv import load_dotenv
 import pymongo
 from pymongo.mongo_client import MongoClient
 
-from datetime import datetime
+from datetime import datetime, timezone, time, timedelta
 
-# Variables d'environnement
+# Récupération des variables d'environnement
 load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')  # Récupère le token du bot Discord depuis le fichier .env
-uri = os.getenv('URI')  # URI de connexion à la base de données MongoDB
+TOKEN = os.getenv('DISCORD_TOKEN')
+uri = os.getenv('URI')
 
-# Configuration des intents du bot
+# Intentions
 intents = discord.Intents.default()
-intents.message_content = True  # Active l'intent pour accéder au contenu des messages
+intents.message_content = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)  # Initialise le bot avec le préfixe '!' et les intents
+# Préfixe
+bot = commands.Bot(command_prefix='!', intents=intents)
 
+# Variable de temps
+frzone = timezone(timedelta(hours=1))
+time = time(hour=9, tzinfo=frzone)
+
+# Classe du cog
 class Birthday(commands.Cog):
-    def __init__(self, bot):
+
+    def __init__(self, bot): # Initialisation du cog
         self.bot = bot
-        self.last_checked_date = None
-        self.loadDB()  # Initialise la connexion à la base de données
-        self.findChannel()  # Localise le canal Discord pour les messages
-        self.check_birthday.start()  # Démarre la tâche planifiée pour vérifier les anniversaires
+        self.loadDB()
+        self.findChannelAnniv()
+        self.check_birthday.start()
 
-    def loadDB(self):
-        # Initialise la connexion à MongoDB
+    async def cog_before_invoke(self, ctx): # S'exécute avant chaque commande du cog
+        print(f"Commande {ctx.command} exécutée par {ctx.author}")
+
+    def loadDB(self): # Initialisation de la database
         client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
-        try:
-            client.admin.command('ping')  # Vérifie la connexion à MongoDB
-            print("Pinged your deployment. You successfully connected to MongoDB!")
-            self.database = client["AppDB"]  # Sélectionne la base de données "AppDB"
-            self.collection = self.database["MemberDB"]  # Sélectionne la collection "MemberDB"
+        try: # Ping la database pour vérifier la connexion
+            client.admin.command('ping')
+            print("Connexion avec la database établie !")
+            self.database = client["AppDB"]
+            self.collection = self.database["MemberDB"]
         except Exception as e:
-            print(e)  # Affiche les erreurs de connexion
+            print(e)
 
-    def findChannel(self):
-        # Trouve le canal Discord où envoyer les messages d'anniversaire
-        self.channel = bot.get_channel(1332489269859844156)  # Remplace l'ID par celui de votre canal
+    def findChannelAnniv(self): # Vérification de l'existence du channel anniversaire
+        self.channel = bot.get_channel(1297192718409400341)
         if self.channel:
-            print("Channel trouvé.")
+            print("Channel anniversaire trouvé.")
 
     def cog_unload(self):
-        # Annule la tâche planifiée lorsque le cog est déchargé
         self.check_birthday.cancel()
 
-    @tasks.loop(hours=24.0)
+    @tasks.loop(time=time) # Tâche : vérification des anniversaires à 9h
     async def check_birthday(self):
-        # Vérifie les anniversaires tous les jours
-        today = datetime.now().strftime("%d/%m")  # Format de la date du jour
-        if self.last_checked_date == today:  # Vérifie si l'anniversaire a déjà été souhaité aujourd'hui
-            print("Les anniversaires ont déjà été vérifiés aujourd'hui.")
-            return
-        self.last_checked_date = today  # Met à jour la dernière date vérifiée
-        print(today)
-        if self.collection.count_documents({"birthday": today}) > 0:  # Recherche des documents correspondant à la date
+        today = datetime.now().strftime("%d/%m")
+        if self.collection.count_documents({"birthday": today}) > 0:
             birthdays = self.collection.find({"birthday": today})
             for keys in birthdays:
-                await self.channel.send(f"Joyeux anniversaire {keys['name']} ! 🎉")  # Envoie un message pour chaque anniversaire
+                await self.channel.send(f"Joyeux anniversaire {keys['name']} ! 🎉")
         else:
             print("Aucun anniversaire trouvé aujourd'hui.")
 
-    @commands.command()
+    @commands.command() # Commande : ajout des anniversaires
     async def birthday(self, ctx, birth: str):
-        # Commande pour enregistrer l'anniversaire d'un utilisateur
         try:
-            birth = datetime.strptime(birth, "%d/%m/%Y")  # Convertit la chaîne de date en objet datetime
-            date = datetime.strftime(birth, "%d/%m")  # Extrait le jour et le mois
-            print(date)
-            age = int(datetime.now().strftime("%Y")) - int(datetime.strftime(birth,"%Y"))  # Calcule l'âge
+            birth = datetime.strptime(birth, "%d/%m/%Y")
+            date = birth.date()
+            datestr = datetime.strftime(birth, "%d/%m")
+            age = int(datetime.now().strftime("%Y")) - int(datetime.strftime(birth,"%Y"))
             print(age)
-            print(ctx.author.name)
-            existing_user = self.collection.find_one({"name": ctx.author.name})  # Vérifie si l'utilisateur existe déjà
+            if date.month > date.today().month or (date.month == date.today().month and date.day > date.today().day) :
+                age -= 1
+                print(age)
+            existing_user = self.collection.find_one({"name": ctx.author.name})
             if existing_user:
                 self.collection.update_one(
                     {"name": ctx.author.name},
-                    {"$set": {"birth": birth,"birthday": date, "age": age}}  # Met à jour les informations existantes
+                    {"$set": {"birth": birth,"birthday": datestr, "age": age}}
                 )
             else:
                 self.collection.insert_one({
-                    "name": ctx.author.name,  # Ajoute un nouvel utilisateur avec ses informations
+                    "name": ctx.author.name,
                     "birth": birth,
-                    "birthday": date,
+                    "birthday": datestr,
                     "age": age,
                 })
-            await ctx.send(f"Merci {ctx.author.mention}, ton anniversaire a bien été enregistré à la date du {date} !")
+            await ctx.send(f"Merci {ctx.author.mention}, ton anniversaire a bien été enregistré à la date du {datestr} !")
         except ValueError:
-            # Gestion des erreurs de format de date
             await ctx.send("Format de date incorrect. Veuillez entrer une date au format 'dd/mm/yyyy'.")
+
+class Stats(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.loadDB()
+
+    def loadDB(self):
+        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        try:
+            client.admin.command('ping')
+            print("Connecté à MongoDB!")
+            self.database = client["AppDB"]
+            self.collection = self.database["MessagesDocument"]  # Collection des stats de messages
+        except Exception as e:
+            print(f"Erreur de connexion MongoDB : {e}")
+
+    @commands.command()
+    async def stats(self, ctx):
+        """Affiche les 5 membres ayant envoyé le plus de messages."""
+        try:
+            top_users = list(self.collection.find({}, {"user_id": 1, "username": 1, "message_count": 1})
+                             .sort("message_count", -1)
+                             .limit(5))
+
+            if not top_users:
+                await ctx.send("Aucune donnée de messages trouvée.")
+                return
+
+            embed = discord.Embed(title="🏆 Classement des messages", color=discord.Color.blue())
+
+            for i, user in enumerate(top_users, start=1):
+                embed.add_field(
+                    name=f"{i}. {user['username']}",
+                    value=f"📩 {user['message_count']} messages",
+                    inline=False
+                )
+
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send("Une erreur s'est produite lors de la récupération des statistiques.")
+            print(f"Erreur MongoDB : {e}")
 
 
 @bot.event
 async def on_ready():
-    # Événement déclenché lorsque le bot est prêt
     print(f'Connecté en tant que {bot.user.name}')
-    await bot.add_cog(Birthday(bot))  # Ajoute le cog Birthday au bot
+    await bot.add_cog(Birthday(bot)) # On charge le cog Birthday
+    await bot.add_cog(Stats(bot))
+    print("Cogs chargés :", bot.cogs.keys())  # Affiche les cogs chargés
 
-bot.run(TOKEN)  # Lance le bot avec le token
+
+bot.run(TOKEN) # On execute le bot
