@@ -189,7 +189,7 @@ class Experience(commands.Cog):
 
         while xp >= required_xp:
             level += 1
-            required_xp *= 1.16  # Taux d'augmentation à 1.16 pour commencer (maybe to high)
+            required_xp = required_xp + required_xp * 1.05  # Taux d'augmentation à 1.16 pour commencer (maybe to high)
 
         return level, required_xp
 
@@ -223,6 +223,26 @@ class Experience(commands.Cog):
         if user_data and new_level > user_data["level"]:
             await message.channel.send(f"🎉 {username} est maintenant **niveau {new_level}** ! 🎉")
 
+    @commands.command()
+    async def rank(self, ctx, member: discord.Member = None):
+        """Affiche le niveau et l'XP d'un utilisateur."""
+        member = member or ctx.author  # Si aucun utilisateur n'est mentionné, on prend celui qui tape la commande
+        user_id = str(member.id)
+        user_data = self.collection.find_one({"user_id": user_id})
+
+        if not user_data:
+            await ctx.send(f"{member.mention} n'a pas encore gagné d'XP.")
+            return
+
+        level = user_data["level"]
+        xp = user_data["xp"]
+        _, next_xp = self.calculate_level(xp)
+
+        embed = discord.Embed(title=f"🏅 Niveau de {member.name}", color=discord.Color.gold())
+        embed.add_field(name="Niveau", value=f"{level}", inline=True)
+        embed.add_field(name="XP", value=f"{xp}/{int(next_xp)}", inline=True)
+
+        await ctx.send(embed=embed)
 
 
 
