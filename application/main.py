@@ -110,18 +110,22 @@ class Stats(commands.Cog):
             print(f"Erreur de connexion MongoDB : {e}")
 
     @commands.command()
-    async def stats(self, ctx):
-        """Affiche les 5 membres ayant envoyé le plus de messages."""
+    async def stats(self, ctx, limit: int = 5):
+        """Affiche les membres ayant envoyé le plus de messages, avec une limite définie par l'utilisateur."""
         try:
+            if limit <= 0:
+                await ctx.send("La limite doit être un nombre positif.")
+                return
+
             top_users = list(self.collection.find({}, {"user_id": 1, "username": 1, "message_count": 1})
                              .sort("message_count", -1)
-                             .limit(5))
+                             .limit(limit))
 
             if not top_users:
                 await ctx.send("Aucune donnée de messages trouvée.")
                 return
 
-            embed = discord.Embed(title="🏆 Classement des messages", color=discord.Color.blue())
+            embed = discord.Embed(title=f"🏆 Classement des {limit} meilleurs posteurs", color=discord.Color.blue())
 
             for i, user in enumerate(top_users, start=1):
                 embed.add_field(
@@ -131,9 +135,36 @@ class Stats(commands.Cog):
                 )
 
             await ctx.send(embed=embed)
+        except ValueError:
+            await ctx.send("Veuillez entrer un nombre valide pour la limite.")
         except Exception as e:
             await ctx.send("Une erreur s'est produite lors de la récupération des statistiques.")
             print(f"Erreur MongoDB : {e}")
+
+
+@bot.event
+async def on_message(message):
+    """Incrémente le compteur de messages pour chaque utilisateur."""
+    if message.author.bot: # Ignore les messages des bots
+        return
+
+    client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+    database = client["AppDB"]
+    collection = database["MessagesDocument"]
+
+    user_id = str(message.author.id)
+    username = message.author.name
+    print(f'Message : {message.content} send by {username}')
+
+    # Mise à jour du compteur de messages de l'utilisateur
+    collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"username": username}, "$inc": {"message_count": 1}},
+        upsert=True  # Crée un l'utilisateur s'il est pas là
+    )
+
+    await bot.process_commands(message)
+
 
 
 @bot.event
