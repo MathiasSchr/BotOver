@@ -137,6 +137,31 @@ class Stats(commands.Cog):
 
 
 @bot.event
+async def on_message(message):
+    """Incrémente le compteur de messages pour chaque utilisateur."""
+    if message.author.bot: # Ignore les messages des bots
+        return
+
+    client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+    database = client["AppDB"]
+    collection = database["MessagesDocument"]
+
+    user_id = str(message.author.id)
+    username = message.author.name
+    print(f'Message : {message.content} send by {username}')
+
+    # Mise à jour du compteur de messages de l'utilisateur
+    collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"username": username}, "$inc": {"message_count": 1}},
+        upsert=True  # Crée un l'utilisateur s'il est pas là
+    )
+
+    await bot.process_commands(message)
+
+
+
+@bot.event
 async def on_ready():
     print(f'Connecté en tant que {bot.user.name}')
     await bot.add_cog(Birthday(bot)) # On charge le cog Birthday
