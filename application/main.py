@@ -244,6 +244,73 @@ class Experience(commands.Cog):
 
         await ctx.send(embed=embed)
 
+class VoiceTracker(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.loadDB()# Collection MongoDB
+        self.user_voice_times = {}  # Dictionnaire temporaire pour suivre les entrées en vocal
+
+    def loadDB(self):
+        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        try:
+            client.admin.command('ping')
+            print("Connecté à MongoDB!")
+            self.database = client["AppDB"]
+            self.collection = self.database["ExperienceDocument"]  # Collection de l'expérience
+        except Exception as e:
+            print(f"Erreur de connexion MongoDB : {e}")
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Détecte quand un utilisateur rejoint ou quitte un salon vocal"""
+        user_id = str(member.id)
+
+        # Si l'utilisateur rejoint un canal vocal
+        if before.channel is None and after.channel is not None:
+            self.user_voice_times[user_id] = datetime.utcnow()  # Enregistre l'heure d'entrée
+            print(f"{member.name} a rejoint {after.channel.name} à {self.user_voice_times[user_id]}")
+
+        # Si l'utilisateur quitte un canal vocal
+        elif before.channel is not None and after.channel is None:
+            if user_id in self.user_voice_times:
+                join_time = self.user_voice_times.pop(user_id)
+                duration = (datetime.utcnow() - join_time).total_seconds()  # Temps passé en secondes
+
+                # Mise à jour du temps total en vocal
+                user_data = self.collection.find_one({"user_id": user_id})
+
+                if user_data:
+                    total_time = user_data["total_time"] + duration
+                else:
+                    total_time = duration  # Premier enregistrement
+
+                self.collection.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"username": member.name, "total_time": total_time}},
+                    upsert=True
+                )
+
+                print(f"{member.name} a quitté {before.channel.name} après {duration:.2f} secondes")
+
+    @commands.command()
+    async def voicetime(self, ctx, member: discord.Member = None):
+        """Affiche le temps total passé en vocal"""
+        member = member or ctx.author
+        user_id = str(member.id)
+        user_data = self.collection.find_one({"user_id": user_id})
+
+        if not user_data:
+            await ctx.send(f"{member.mention} n'a pas encore été en vocal.")
+            return
+
+        total_seconds = int(user_data["total_time"])
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        embed = discord.Embed(title=f"🎙 Temps vocal de {member.name}", color=discord.Color.green())
+        embed.add_field(name="Total", value=f"{hours}h {minutes}m {seconds}s", inline=False)
+
+        await ctx.send(embed=embed)
 
 
 @bot.event
@@ -252,6 +319,7 @@ async def on_ready():
     await bot.add_cog(Birthday(bot)) # On charge le cog Birthday
     await bot.add_cog(Stats(bot))
     await bot.add_cog(Experience(bot))
+    await bot.add_cog(VoiceTracker(bot))
     print("Cogs chargés :", bot.cogs.keys())  # Affiche les cogs chargés
 
 
