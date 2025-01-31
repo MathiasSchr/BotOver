@@ -1,4 +1,6 @@
 # Dépendances
+import random
+
 import discord
 from discord.ext import tasks, commands
 
@@ -165,6 +167,63 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+class Experience(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.loadDB()
+
+    def loadDB(self):
+        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        try:
+            client.admin.command('ping')
+            print("Connecté à MongoDB!")
+            self.database = client["AppDB"]
+            self.collection = self.database["ExperienceDocument"]  # Collection de l'expérience
+        except Exception as e:
+            print(f"Erreur de connexion MongoDB : {e}")
+
+    def calculate_level(self, xp):
+        """Calcule le niveau en fonction de l'XP selon la formule donnée."""
+        level = 1
+        required_xp = 30  # Xp pour le lvl 1
+
+        while xp >= required_xp:
+            level += 1
+            required_xp *= 1.16  # Taux d'augmentation à 1.16 pour commencer (maybe to high)
+
+        return level, required_xp
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Ajoute de l'XP lorsqu'un message est envoyé."""
+        if message.author.bot:
+            return
+
+        user_id = str(message.author.id)
+        username = message.author.name
+        xp_gained = random.randint(1, 5)  # Gain d'XP entre 1 et 5
+        print(f"{username} gained : {xp_gained} xp")
+
+        user_data = self.collection.find_one({"user_id": user_id})
+
+        if user_data:
+            new_xp = user_data["xp"] + xp_gained
+        else:
+            new_xp = xp_gained  # Si c'est son premier message
+
+        new_level, next_level_xp = self.calculate_level(new_xp)
+
+        self.collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"username": username, "xp": new_xp, "level": new_level}},
+            upsert=True
+        )
+
+        # Check du levelup
+        if user_data and new_level > user_data["level"]:
+            await message.channel.send(f"🎉 {username} est maintenant **niveau {new_level}** ! 🎉")
+
+
 
 
 @bot.event
@@ -172,6 +231,7 @@ async def on_ready():
     print(f'Connecté en tant que {bot.user.name}')
     await bot.add_cog(Birthday(bot)) # On charge le cog Birthday
     await bot.add_cog(Stats(bot))
+    await bot.add_cog(Experience(bot))
     print("Cogs chargés :", bot.cogs.keys())  # Affiche les cogs chargés
 
 
