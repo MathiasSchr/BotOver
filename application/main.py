@@ -221,7 +221,7 @@ class Experience(commands.Cog):
         )
 
         # Check du levelup
-        if user_data and new_level > user_data["level"]:
+        if user_data and (new_level > user_data["level"]) :
             await message.channel.send(f"🎉 {username} est maintenant **niveau {new_level}** ! 🎉")
 
     @commands.command()
