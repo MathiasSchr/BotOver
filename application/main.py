@@ -112,6 +112,25 @@ class Stats(commands.Cog):
         except Exception as e:
             print(f"Erreur de connexion MongoDB : {e}")
 
+    @bot.Cog.listener()
+    async def on_message(message):
+        """Incrémente le compteur de messages pour chaque utilisateur."""
+        if message.author.bot: # Ignore les messages des bots
+            return
+    
+        user_id = str(message.author.id)
+        username = message.author.name
+        print(f'Message : {message.content} send by {username}')
+    
+        # Mise à jour du compteur de messages de l'utilisateur
+        self.collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"username": username}, "$inc": {"message_count": 1}},
+            upsert=True  # Crée un l'utilisateur s'il est pas là
+        )
+    
+        await bot.process_commands(message)
+
     @commands.command()
     async def stats(self, ctx, limit: int = 5):
         """Affiche les membres ayant envoyé le plus de messages, avec une limite définie par l'utilisateur."""
@@ -143,30 +162,6 @@ class Stats(commands.Cog):
         except Exception as e:
             await ctx.send("Une erreur s'est produite lors de la récupération des statistiques.")
             print(f"Erreur MongoDB : {e}")
-
-
-@bot.event
-async def on_message(message):
-    """Incrémente le compteur de messages pour chaque utilisateur."""
-    if message.author.bot: # Ignore les messages des bots
-        return
-
-    client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
-    database = client["AppDB"]
-    collection = database["MessagesDocument"]
-
-    user_id = str(message.author.id)
-    username = message.author.name
-    print(f'Message : {message.content} send by {username}')
-
-    # Mise à jour du compteur de messages de l'utilisateur
-    collection.update_one(
-        {"user_id": user_id},
-        {"$set": {"username": username}, "$inc": {"message_count": 1}},
-        upsert=True  # Crée un l'utilisateur s'il est pas là
-    )
-
-    await bot.process_commands(message)
 
 class Experience(commands.Cog):
     def __init__(self, bot):
