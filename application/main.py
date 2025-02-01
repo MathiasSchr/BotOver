@@ -1,6 +1,9 @@
 # Dépendances
+import random
+
 import discord
 from discord.ext import tasks, commands
+from discord.ui import View, Button
 
 import os
 from dotenv import load_dotenv
@@ -165,6 +168,205 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+class Experience(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.loadDB()
+
+    def loadDB(self):
+        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        try:
+            client.admin.command('ping')
+            print("Connecté à MongoDB!")
+            self.database = client["AppDB"]
+            self.collection = self.database["ExperienceDocument"]  # Collection de l'expérience
+        except Exception as e:
+            print(f"Erreur de connexion MongoDB : {e}")
+
+    def calculate_level(self, xp):
+        """Calcule le niveau en fonction de l'XP selon la formule donnée."""
+        level = 1
+        required_xp = 30  # Xp pour le lvl 1
+
+        while xp >= required_xp:
+            level += 1
+            required_xp = required_xp + required_xp * 1.05  # Taux d'augmentation à 1.16 pour commencer (maybe to high)
+
+        return level, required_xp
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Ajoute de l'XP lorsqu'un message est envoyé."""
+        if message.author.bot:
+            return
+
+        user_id = str(message.author.id)
+        username = message.author.name
+        xp_gained = random.randint(1, 5)  # Gain d'XP entre 1 et 5
+        print(f"{username} gained : {xp_gained} xp")
+
+        user_data = self.collection.find_one({"user_id": user_id})
+
+        if user_data:
+            new_xp = user_data["xp"] + xp_gained
+        else:
+            new_xp = xp_gained  # Si c'est son premier message
+
+        new_level, next_level_xp = self.calculate_level(new_xp)
+
+        self.collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"username": username, "xp": new_xp, "level": new_level}},
+            upsert=True
+        )
+
+        # Check du levelup
+        if user_data and new_level > user_data["level"]:
+            await message.channel.send(f"🎉 {username} est maintenant **niveau {new_level}** ! 🎉")
+
+    @commands.command()
+    async def rank(self, ctx, member: discord.Member = None):
+        """Affiche le niveau et l'XP d'un utilisateur."""
+        member = member or ctx.author  # Si aucun utilisateur n'est mentionné, on prend celui qui tape la commande
+        user_id = str(member.id)
+        user_data = self.collection.find_one({"user_id": user_id})
+
+        if not user_data:
+            await ctx.send(f"{member.mention} n'a pas encore gagné d'XP.")
+            return
+
+        level = user_data["level"]
+        xp = user_data["xp"]
+        _, next_xp = self.calculate_level(xp)
+
+        embed = discord.Embed(title=f"🏅 Niveau de {member.name}", color=discord.Color.gold())
+        embed.add_field(name="Niveau", value=f"{level}", inline=True)
+        embed.add_field(name="XP", value=f"{xp}/{int(next_xp)}", inline=True)
+
+        await ctx.send(embed=embed)
+
+class VoiceTracker(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.loadDB()# Collection MongoDB
+        self.user_voice_times = {}  # Dictionnaire temporaire pour suivre les entrées en vocal
+
+    def loadDB(self):
+        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        try:
+            client.admin.command('ping')
+            print("Connecté à MongoDB!")
+            self.database = client["AppDB"]
+            self.collection = self.database["ExperienceDocument"]  # Collection de l'expérience
+        except Exception as e:
+            print(f"Erreur de connexion MongoDB : {e}")
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Détecte quand un utilisateur rejoint ou quitte un salon vocal"""
+        user_id = str(member.id)
+
+        # Si l'utilisateur rejoint un canal vocal
+        if before.channel is None and after.channel is not None:
+            self.user_voice_times[user_id] = datetime.utcnow()  # Enregistre l'heure d'entrée
+            print(f"{member.name} a rejoint {after.channel.name} à {self.user_voice_times[user_id]}")
+
+        # Si l'utilisateur quitte un canal vocal
+        elif before.channel is not None and after.channel is None:
+            if user_id in self.user_voice_times:
+                join_time = self.user_voice_times.pop(user_id)
+                duration = (datetime.utcnow() - join_time).total_seconds()  # Temps passé en secondes
+
+                # Mise à jour du temps total en vocal
+                user_data = self.collection.find_one({"user_id": user_id})
+
+                if user_data:
+                    total_time = user_data["total_time"] + duration
+                else:
+                    total_time = duration  # Premier enregistrement
+
+                self.collection.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"username": member.name, "total_time": total_time}},
+                    upsert=True
+                )
+
+                print(f"{member.name} a quitté {before.channel.name} après {duration:.2f} secondes")
+
+    @commands.command()
+    async def voicetime(self, ctx, member: discord.Member = None):
+        """Affiche le temps total passé en vocal"""
+        member = member or ctx.author
+        user_id = str(member.id)
+        user_data = self.collection.find_one({"user_id": user_id})
+
+        if not user_data:
+            await ctx.send(f"{member.mention} n'a pas encore été en vocal.")
+            return
+
+        total_seconds = int(user_data["total_time"])
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        embed = discord.Embed(title=f"🎙 Temps vocal de {member.name}", color=discord.Color.green())
+        embed.add_field(name="Total", value=f"{hours}h {minutes}m {seconds}s", inline=False)
+
+        await ctx.send(embed=embed)
+
+
+class DiceGameView(View):
+    """Vue interactive contenant les boutons pour lancer les dés"""
+
+    def __init__(self, user_id):
+        super().__init__(timeout=60)  # Le message interactif dure 60s
+        self.user_id = user_id  # Stocke l'ID du joueur qui a initié le jeu
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        return interaction.user.id == self.user_id
+
+    async def roll_dice(self, interaction: discord.Interaction, sides: int):
+        result = random.randint(1, sides)  # Lancer du dé
+        await interaction.response.send_message(
+            f"🎲 **{interaction.user.name}** a lancé un **D{sides}** et a obtenu **{result}**!", ephemeral=False
+        )
+
+    @discord.ui.button(label="🎲 D6", style=discord.ButtonStyle.primary)
+    async def d6(self, interaction: discord.Interaction, button: Button):
+        await self.roll_dice(interaction, 6)
+
+    @discord.ui.button(label="🎲 D10", style=discord.ButtonStyle.primary)
+    async def d10(self, interaction: discord.Interaction, button: Button):
+        await self.roll_dice(interaction, 10)
+
+    @discord.ui.button(label="🎲 D20", style=discord.ButtonStyle.primary)
+    async def d20(self, interaction: discord.Interaction, button: Button):
+        await self.roll_dice(interaction, 20)
+
+    @discord.ui.button(label="🎲 D50", style=discord.ButtonStyle.primary)
+    async def d50(self, interaction: discord.Interaction, button: Button):
+        await self.roll_dice(interaction, 50)
+
+    @discord.ui.button(label="🎲 D100", style=discord.ButtonStyle.primary)
+    async def d100(self, interaction: discord.Interaction, button: Button):
+        await self.roll_dice(interaction, 100)
+
+
+class DiceGame(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def dice(self, ctx):
+        """Affiche le message interactif pour lancer un dé"""
+        embed = discord.Embed(
+            title="🎲 Lancer de dés",
+            description="Clique sur un bouton pour lancer un dé !",
+            color=discord.Color.blue()
+        )
+        view = DiceGameView(user_id=ctx.author.id)  # Création de la vue interactive
+        await ctx.send(embed=embed, view=view)
+
 
 
 @bot.event
@@ -172,6 +374,9 @@ async def on_ready():
     print(f'Connecté en tant que {bot.user.name}')
     await bot.add_cog(Birthday(bot)) # On charge le cog Birthday
     await bot.add_cog(Stats(bot))
+    await bot.add_cog(Experience(bot))
+    await bot.add_cog(VoiceTracker(bot))
+    await bot.add_cog(DiceGame(bot))
     print("Cogs chargés :", bot.cogs.keys())  # Affiche les cogs chargés
 
 
