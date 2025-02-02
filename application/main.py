@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import pymongo
 from pymongo.mongo_client import MongoClient
 
-from datetime import datetime, timezone, time, timedelta
+from datetime import datetime, timezone, time, timedelta, date
 
 # Récupération des variables d'environnement
 load_dotenv()
@@ -29,7 +29,6 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 frzone = timezone(timedelta(hours=1))
 time = time(hour=9, tzinfo=frzone)
 
-# Classe du cog
 class Birthday(commands.Cog):
 
     def __init__(self, bot): # Initialisation du cog
@@ -37,27 +36,29 @@ class Birthday(commands.Cog):
         self.loadDB()
         self.findChannelAnniv()
         self.check_birthday.start()
-
-    async def cog_before_invoke(self, ctx): # S'exécute avant chaque commande du cog
-        print(f"Commande {ctx.command} exécutée par {ctx.author}")
+        print(f"{self.qualified_name} chargé !")
 
     def loadDB(self): # Initialisation de la database
-        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        self.client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
         try: # Ping la database pour vérifier la connexion
-            client.admin.command('ping')
-            print("Connexion avec la database établie !")
-            self.database = client["AppDB"]
+            self.client.admin.command('ping')
+            print(f"{self.qualified_name} : Connecté à MongoDB!")
+            self.database = self.client["AppDB"]
             self.collection = self.database["MemberDB"]
         except Exception as e:
-            print(e)
+            print(f"{self.qualified_name} : Erreur de connexion MongoDB : {e}")
 
     def findChannelAnniv(self): # Vérification de l'existence du channel anniversaire
         self.channel = bot.get_channel(1297192718409400341)
         if self.channel:
-            print("Channel anniversaire trouvé.")
+            print(f"{self.qualified_name} : Channel anniversaire trouvé.")
 
     def cog_unload(self):
+        self.client.close()
         self.check_birthday.cancel()
+
+    async def cog_before_invoke(self, ctx): # S'exécute avant chaque commande du cog
+        print(f"{self.qualified_name} : Commande {ctx.command} exécutée par {ctx.author}")
 
     @tasks.loop(time=time) # Tâche : vérification des anniversaires à 9h
     async def check_birthday(self):
@@ -67,60 +68,73 @@ class Birthday(commands.Cog):
             for keys in birthdays:
                 await self.channel.send(f"Joyeux anniversaire {keys['name']} ! 🎉")
         else:
-            print("Aucun anniversaire trouvé aujourd'hui.")
+            print(f"{self.qualified_name} : Aucun anniversaire trouvé aujourd'hui.")
 
     @commands.command() # Commande : ajout des anniversaires
     async def birthday(self, ctx, birth: str):
         try:
             birth = datetime.strptime(birth, "%d/%m/%Y")
-            date = birth.date()
-            datestr = datetime.strftime(birth, "%d/%m")
-            age = int(datetime.now().strftime("%Y")) - int(datetime.strftime(birth,"%Y"))
-            print(age)
-            if date.month > date.today().month or (date.month == date.today().month and date.day > date.today().day) :
-                age -= 1
-                print(age)
-            existing_user = self.collection.find_one({"name": ctx.author.name})
-            if existing_user:
-                self.collection.update_one(
-                    {"name": ctx.author.name},
-                    {"$set": {"birth": birth,"birthday": datestr, "age": age}}
-                )
+            birth_date = birth.date()
+            if birth > datetime.now():
+                await ctx.send(f"{ctx.author.mention}, tu ne peux pas être né dans le futur !")
+            elif birth < datetime(1920, 1, 1,0,0,0):
+                await ctx.send(f"{ctx.author.mention}, tu n'es pas Denver le dinosaure !")
             else:
-                self.collection.insert_one({
-                    "name": ctx.author.name,
-                    "birth": birth,
-                    "birthday": datestr,
-                    "age": age,
-                })
-            await ctx.send(f"Merci {ctx.author.mention}, ton anniversaire a bien été enregistré à la date du {datestr} !")
+                datestr = datetime.strftime(birth, "%d/%m")
+                age = int(datetime.now().strftime("%Y")) - int(datetime.strftime(birth,"%Y"))
+                if birth_date.month > birth_date.today().month or (birth_date.month == birth_date.today().month and birth_date.day > birth_date.today().day) :
+                    age -= 1
+                if self.collection.count_documents({"name": ctx.author.name})> 0 :
+                    self.collection.update_one(
+                        {"name": ctx.author.name},
+                        {"$set": {"birth": birth,"birthday": datestr, "age": age}}
+                    )
+                else:
+                    self.collection.insert_one({
+                        "name": ctx.author.name,
+                        "birth": birth,
+                        "birthday": datestr,
+                        "age": age,
+                    })
+                await ctx.send(f"Merci {ctx.author.mention}, ton anniversaire a bien été enregistré à la date du {datestr} !")
         except ValueError:
-            await ctx.send("Format de date incorrect. Veuillez entrer une date au format 'dd/mm/yyyy'.")
+            await ctx.send(f"Format de date incorrect {ctx.author.mention}. Veuillez entrer une date au format 'dd/mm/yyyy'.")
 
 class Stats(commands.Cog):
+
     def __init__(self, bot):
         self.bot = bot
         self.loadDB()
+        print(f"{self.qualified_name} chargé !")
 
     def loadDB(self):
-        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        self.client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
         try:
-            client.admin.command('ping')
-            print("Connecté à MongoDB!")
-            self.database = client["AppDB"]
+            self.client.admin.command('ping')
+            print(f"{self.qualified_name} : Connecté à MongoDB!")
+            self.database = self.client["AppDB"]
             self.collection = self.database["MessagesDocument"]  # Collection des stats de messages
         except Exception as e:
-            print(f"Erreur de connexion MongoDB : {e}")
+            print(f"{self.qualified_name} : Erreur de connexion MongoDB : {e}")
+        
+    def cog_unload(self):
+        self.client.close()
 
-    @bot.Cog.listener()
-    async def on_message(message):
+    async def cog_before_invoke(self, ctx): # S'exécute avant chaque commande du cog
+        print(f"{self.qualified_name} : Commande {ctx.command} exécutée par {ctx.author}")
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
         """Incrémente le compteur de messages pour chaque utilisateur."""
         if message.author.bot: # Ignore les messages des bots
+            return
+
+        if "!" in message.content: # Ignore les messages des bots
             return
     
         user_id = str(message.author.id)
         username = message.author.name
-        print(f'Message : {message.content} send by {username}')
+        print(f"{self.qualified_name} : Message : {message.content} send by {username}")
     
         # Mise à jour du compteur de messages de l'utilisateur
         self.collection.update_one(
@@ -161,22 +175,30 @@ class Stats(commands.Cog):
             await ctx.send("Veuillez entrer un nombre valide pour la limite.")
         except Exception as e:
             await ctx.send("Une erreur s'est produite lors de la récupération des statistiques.")
-            print(f"Erreur MongoDB : {e}")
+            print(f"{self.qualified_name} : Erreur MongoDB : {e}")
 
 class Experience(commands.Cog):
+    
     def __init__(self, bot):
         self.bot = bot
         self.loadDB()
+        print(f"{self.qualified_name} chargé !")
 
     def loadDB(self):
-        client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        self.client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
         try:
-            client.admin.command('ping')
-            print("Connecté à MongoDB!")
-            self.database = client["AppDB"]
+            self.client.admin.command('ping')
+            print(f"{self.qualified_name} : Connecté à MongoDB!")
+            self.database = self.client["AppDB"]
             self.collection = self.database["ExperienceDocument"]  # Collection de l'expérience
         except Exception as e:
-            print(f"Erreur de connexion MongoDB : {e}")
+            print(f"{self.qualified_name} : Erreur de connexion MongoDB : {e}")
+
+    def cog_unload(self):
+        self.client.close()
+
+    async def cog_before_invoke(self, ctx): # S'exécute avant chaque commande du cog
+        print(f"{self.qualified_name} : Commande {ctx.command} exécutée par {ctx.author}")
 
     def calculate_level(self, xp):
         """Calcule le niveau en fonction de l'XP selon la formule donnée."""
@@ -195,15 +217,18 @@ class Experience(commands.Cog):
         if message.author.bot:
             return
 
+        if "!" in message.content: # Ignore les messages des bots
+            return
+
         user_id = str(message.author.id)
         username = message.author.name
         xp_gained = random.randint(1, 5)  # Gain d'XP entre 1 et 5
-        print(f"{username} gained : {xp_gained} xp")
+        print(f"{self.qualified_name} : {username} gained : {xp_gained} xp")
 
         user_data = self.collection.find_one({"user_id": user_id})
 
-        if user_data:
-            new_xp = user_data["xp"] + xp_gained
+        if self.collection.count_documents({"user_id": user_id})> 0 :
+            new_xp = user_data["xp"]+ xp_gained
         else:
             new_xp = xp_gained  # Si c'est son premier message
 
@@ -245,16 +270,17 @@ class VoiceTracker(commands.Cog):
         self.bot = bot
         self.loadDB()# Collection MongoDB
         self.user_voice_times = {}  # Dictionnaire temporaire pour suivre les entrées en vocal
+        print(f"{self.qualified_name} chargé !")
 
     def loadDB(self):
         client = MongoClient(uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
         try:
             client.admin.command('ping')
-            print("Connecté à MongoDB!")
+            print(f"{self.qualified_name} : Connecté à MongoDB!")
             self.database = client["AppDB"]
-            self.collection = self.database["ExperienceDocument"]  # Collection de l'expérience
+            self.collection = self.database["VoiceActivityDocument"]  # Collection de l'expérience
         except Exception as e:
-            print(f"Erreur de connexion MongoDB : {e}")
+            print(f"{self.qualified_name} : Erreur de connexion MongoDB : {e}")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -264,7 +290,7 @@ class VoiceTracker(commands.Cog):
         # Si l'utilisateur rejoint un canal vocal
         if before.channel is None and after.channel is not None:
             self.user_voice_times[user_id] = datetime.utcnow()  # Enregistre l'heure d'entrée
-            print(f"{member.name} a rejoint {after.channel.name} à {self.user_voice_times[user_id]}")
+            print(f"{self.qualified_name} : {member.name} a rejoint {after.channel.name} à {self.user_voice_times[user_id]}")
 
         # Si l'utilisateur quitte un canal vocal
         elif before.channel is not None and after.channel is None:
@@ -286,7 +312,7 @@ class VoiceTracker(commands.Cog):
                     upsert=True
                 )
 
-                print(f"{member.name} a quitté {before.channel.name} après {duration:.2f} secondes")
+                print(f"{self.qualified_name} : {member.name} a quitté {before.channel.name} après {duration:.2f} secondes")
 
     @commands.command()
     async def voicetime(self, ctx, member: discord.Member = None):
@@ -315,6 +341,7 @@ class DiceGameView(View):
     def __init__(self, user_id):
         super().__init__(timeout=60)  # Le message interactif dure 60s
         self.user_id = user_id  # Stocke l'ID du joueur qui a initié le jeu
+        print(f"{self.qualified_name} chargé !")
 
     async def interaction_check(self, interaction: discord.Interaction):
         return interaction.user.id == self.user_id
@@ -361,8 +388,6 @@ class DiceGame(commands.Cog):
         )
         view = DiceGameView(user_id=ctx.author.id)  # Création de la vue interactive
         await ctx.send(embed=embed, view=view)
-
-
 
 @bot.event
 async def on_ready():
