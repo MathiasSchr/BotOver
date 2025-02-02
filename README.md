@@ -20,6 +20,15 @@ Le code de l'application est développé en **Python** et utilise la bibliothèq
 - **python-dotenv** : Assure la sécurité des informations sensibles, comme le token du bot et les identifiants de connexion à la base de données, pour éviter qu’ils soient codés en clair.
 - **pymongo** : Permet d’établir une connexion avec MongoDB et d’effectuer des requêtes sur la base de données.
 
+### Architecture du code
+
+/application
+ - main.py
+ - config.py
+ - birthday.py
+ - stat.py
+ - experience.py
+
 ### Hébergement
 Le bot est hébergé sur la plateforme **Sparked Host**, offrant un panneau de contrôle intuitif pour gérer facilement les paramètres et les configurations du bot.
 
