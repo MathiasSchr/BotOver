@@ -1,6 +1,7 @@
 import discord
 import pymongo
 from discord.ext import commands
+from discord.ui import View, Button
 from pymongo.mongo_client import MongoClient
 import config
 
@@ -108,6 +109,65 @@ class GameManagement(commands.Cog):
             {"$push": {"players": user_id}}
         )
 
+        # Envoyer le message interactif pour choisir la classe
+        embed = discord.Embed(
+            title="⚔️ Choisis ta classe !",
+            description="Clique sur un bouton pour sélectionner ta classe de départ.",
+            color=discord.Color.blue()
+        )
+        view = ClassSelectionView(user_id, existing_game["game_id"], self)
+        await ctx.send(embed=embed, view=view)
+
+class ClassSelectionView(View):
+    """Vue interactive pour choisir une classe de joueur"""
+
+    def __init__(self, user_id, game_id, cog):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.game_id = game_id
+        self.loadDB()
+        self.cog = cog  # Référence au Cog pour enregistrer la classe
+
+    def loadDB(self):
+        self.client = MongoClient(config.uri, server_api=pymongo.server_api.ServerApi(version="1", strict=True, deprecation_errors=True))
+        try:
+            self.client.admin.command('ping')
+            self.database = self.client["GameDB"]
+            self.collection = self.database["Players"]  # collection des joueurs
+        except Exception as e:
+            print(f"Erreur de connexion MongoDB : {e}")
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        """Empêche les autres joueurs d'interagir avec le bouton"""
+        return interaction.user.id == self.user_id
+
+    async def select_class(self, interaction: discord.Interaction, player_class: str): #todo -> Fix la fonction ici car elle plante
+        """Enregistre la classe choisie par le joueur"""
+        user_id = str(interaction.user.id)
+        username = interaction.user.name
+
+        # Créer le profil du joueur dans la collection `Players`
+        player_data = {
+            "user_id": user_id,
+            "username": username,
+            "game_id": self.game_id,
+            "class": player_class
+        }
+        self.collection.insert_one(player_data)
+
+        await interaction.response.send_message(f"✅ {username}, tu es maintenant **{player_class}** !", ephemeral=False)
+
+    @discord.ui.button(label="⚔️ Test1", style=discord.ButtonStyle.primary)
+    async def warrior(self, interaction: discord.Interaction, button: Button):
+        await self.select_class(interaction, "Test1")
+
+    @discord.ui.button(label="🏹 Test2", style=discord.ButtonStyle.primary)
+    async def archer(self, interaction: discord.Interaction, button: Button):
+        await self.select_class(interaction, "Test2")
+
+    @discord.ui.button(label="🧙 Test3", style=discord.ButtonStyle.primary)
+    async def mage(self, interaction: discord.Interaction, button: Button):
+        await self.select_class(interaction, "Test3")
 
 async def setup(bot):
     await bot.add_cog(GameManagement(bot))
