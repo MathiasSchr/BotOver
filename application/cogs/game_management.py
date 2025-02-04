@@ -86,5 +86,28 @@ class GameManagement(commands.Cog):
 
         await ctx.send(f"🛑 {ctx.author.mention} a stoppé la partie. Le rôle **{role_name}** a été retiré.")
 
+    @commands.command()
+    async def join(self, ctx):
+        """Permet de rejoindre une partie en cours"""
+        existing_game = await self.get_game()
+
+        if not existing_game:
+            await ctx.send("⚠️ Il n'y a aucune partie en cours ! Utilise `!startgame` pour en démarrer une.")
+            return
+
+        user_id = str(ctx.author.id)
+        username = ctx.author.name
+
+        if user_id in existing_game["players"]:
+            await ctx.send(f"⚠️ {username}, tu es déjà dans la partie !")
+            return
+
+        # Ajouter le joueur à la liste des joueurs de la partie
+        self.collection.update_one(
+            {"game_id": existing_game["game_id"]},
+            {"$push": {"players": user_id}}
+        )
+
+
 async def setup(bot):
     await bot.add_cog(GameManagement(bot))
