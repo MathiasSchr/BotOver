@@ -17,7 +17,7 @@ class DiceGameView(View):
     def __init__(self, user_id):
         super().__init__(timeout=60)  # Le message interactif dure 60s
         self.user_id = user_id  # Stocke l'ID du joueur qui a initié le jeu
-        print(f"{self.qualified_name} chargé !")
+        print(f"DiceGameView chargé !")
 
     async def interaction_check(self, interaction: discord.Interaction):
         return interaction.user.id == self.user_id
