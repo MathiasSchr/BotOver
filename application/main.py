@@ -19,6 +19,7 @@ async def on_ready():
     await bot.load_extension("cogs.stats")
     await bot.load_extension("cogs.experience")
     await bot.load_extension("cogs.dicegame")
+    await bot.load_extension("cogs.game_management")
     print("Cogs chargés :", bot.cogs.keys())  # Affiche les cogs chargés
 
 bot.run(config.TOKEN) # On execute le bot
