@@ -1,19 +1,8 @@
-# main.py
-
-# importation du fichier config.py
-import config
-
-# dépendances
-import random
 
 import discord
-from discord.ext import tasks, commands
-from discord.ui import View, Button
+from discord.ext import commands
 
-import pymongo
-from pymongo.mongo_client import MongoClient
-
-from datetime import datetime
+import config
 
 # intentions
 intents = discord.Intents.default()
