@@ -1,7 +1,7 @@
 # BotOver
 
 <p align="center">
-  <img src="file-4jQm2RpeRmvjZsEcr2Z31k.png" width=500 alt="Logo du projet BotOver">
+  <img src="images/file-4jQm2RpeRmvjZsEcr2Z31k.png" width=500 alt="Logo du projet BotOver">
 </p>
 
 ## Description
