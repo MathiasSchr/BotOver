@@ -1,16 +1,15 @@
 # stat.py
 
+from datetime import datetime
+
 # importation du fichier config.py
 import config
-
 # dépendances
 import discord
-from discord.ext import tasks, commands
 import pymongo
-
+from discord.ext import commands
 from pymongo.mongo_client import MongoClient
 
-from datetime import datetime, time, timezone, timedelta
 
 # cog stat message
 class Stats(commands.Cog):

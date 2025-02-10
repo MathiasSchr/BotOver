@@ -1,7 +1,7 @@
 # BotOver
 
 <p align="center">
-  <img src="https://files.oaiusercontent.com/file-4jQm2RpeRmvjZsEcr2Z31k?se=2025-01-28T21%3A33%3A47Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D604800%2C%20immutable%2C%20private&rscd=attachment%3B%20filename%3Dcf8d81c1-9a40-49fa-84b6-95fc843001bf.webp&sig=UmM1K%2B45pS68Qn3f1/l/tgaIwJV1BRQfpqRSJu0d1PA%3D" width=500 alt="Logo du projet BotOver">
+  <img src="images/file-4jQm2RpeRmvjZsEcr2Z31k.png" width=500 alt="Logo du projet BotOver">
 </p>
 
 ## Description
